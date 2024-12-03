@@ -28,9 +28,6 @@ jobs:
       - name: Build Next.js
         run: npm run build
 
-      - name: Export static files
-        run: npm run export
-
       # 5. S3로 정적 파일 동기화
       - name: Sync with S3
         run: |

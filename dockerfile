@@ -13,7 +13,6 @@ COPY . .
 
 # Next.js 빌드 및 정적 파일 생성
 RUN npm run build
-RUN npm run export
 
 # 정적 파일만 유지
 WORKDIR /app/out
