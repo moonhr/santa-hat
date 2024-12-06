@@ -3,7 +3,7 @@ name: Deploy to ECS Fargate
 on:
   push:
     branches:
-      - main # 배포를 트리거하는 브랜치
+      - main
 
 jobs:
   deploy:
@@ -29,7 +29,7 @@ jobs:
       - name: Build, tag, and push Docker image to Amazon ECR
         env:
           IMAGE_REPO_NAME: ${{ secrets.ECR_REPO_NAME }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
         run: |
           IMAGE_TAG=$(git rev-parse HEAD)
           docker build -t $IMAGE_REPO_NAME:$IMAGE_TAG .
@@ -41,11 +41,11 @@ jobs:
           AWS_REGION: ${{ secrets.AWS_REGION }}
           CLUSTER_NAME: ${{ secrets.CLUSTER_NAME }}
           SERVICE_NAME: ${{ secrets.SERVICE_NAME }}
-          IMAGE_REPO_NAME: ${{ secrets.ECR-Repository-Name }}
+          IMAGE_REPO_NAME: ${{ secrets.ECR_REPO_NAME }}
         run: |
           IMAGE_TAG=$(git rev-parse HEAD)
           TASK_DEFINITION_JSON=$(aws ecs describe-task-definition --task-definition $IMAGE_REPO_NAME)
           NEW_TASK_DEFINITION=$(echo $TASK_DEFINITION_JSON | jq --arg IMAGE_URI "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG" '.taskDefinition | .containerDefinitions[0].image=$IMAGE_URI | del(.status,.revision,.taskDefinitionArn)')
           echo "$NEW_TASK_DEFINITION" > new-task-definition.json
           TASK_DEFINITION_ARN=$(aws ecs register-task-definition --cli-input-json file://new-task-definition.json | jq -r '.taskDefinition.taskDefinitionArn')
-          aws ecs update-service --cluster $CLUSTER_NAME --service $SERVICE_NAME --task-definition $TASK_DEFINITION_ARNss
+          aws ecs update-service --cluster $CLUSTER_NAME --service $SERVICE_NAME --task-definition $TASK_DEFINITION_ARN
