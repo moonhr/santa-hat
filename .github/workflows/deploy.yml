@@ -1,41 +1,46 @@
-name: Deploy to ECS Fargate
+name: Deploy to AWS ECS
 
 on:
   push:
     branches:
-      - main
+      - main # main 브랜치에 푸시할 때 실행
 
 jobs:
   deploy:
-    name: Deploy to ECS
     runs-on: ubuntu-latest
 
     steps:
+      # 1. 코드 체크아웃
       - name: Checkout code
         uses: actions/checkout@v3
 
+      # 2. AWS 자격 증명 구성
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Log in to Amazon ECR
-        id: ecr-login
+      # 3. Amazon ECR 로그인
+      - name: Login to Amazon ECR
         run: |
-          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | \
+          docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
 
-      - name: Build, tag, and push Docker image to Amazon ECR
+      # 4. Docker 이미지 빌드 및 푸시
+      - name: Build and Push Docker Image
         env:
           IMAGE_REPO_NAME: ${{ secrets.ECR_REPO_NAME }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
         run: |
           IMAGE_TAG=$(git rev-parse HEAD)
           docker build -t $IMAGE_REPO_NAME:$IMAGE_TAG .
-          docker tag $IMAGE_REPO_NAME:$IMAGE_TAG ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG
-          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG
+          docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG
+          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG
 
+      # 5. ECS 서비스 업데이트
       - name: Deploy to ECS
         env:
           AWS_REGION: ${{ secrets.AWS_REGION }}
@@ -49,4 +54,7 @@ jobs:
           NEW_TASK_DEFINITION=$(echo $TASK_DEFINITION_JSON | jq --arg IMAGE_URI "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG" '.taskDefinition | .containerDefinitions[0].image=$IMAGE_URI | del(.status,.revision,.taskDefinitionArn)')
           echo "$NEW_TASK_DEFINITION" > new-task-definition.json
           TASK_DEFINITION_ARN=$(aws ecs register-task-definition --cli-input-json file://new-task-definition.json | jq -r '.taskDefinition.taskDefinitionArn')
-          aws ecs update-service --cluster $CLUSTER_NAME --service $SERVICE_NAME --task-definition $TASK_DEFINITION_ARN
+          aws ecs update-service \
+            --cluster $CLUSTER_NAME \
+            --service $SERVICE_NAME \
+            --task-definition $TASK_DEFINITION_ARN
